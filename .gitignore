@@ -1,0 +1,6 @@
+work
+results/
+key/
+organizer/
+__pycache__/
+.DS_Store

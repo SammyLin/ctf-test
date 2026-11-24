@@ -1,0 +1,20 @@
+Goal
+Answer four questions about how this codebase works by inspecting the code directly, and write the answers with file path citations to `answers.md` in the repository root.
+
+Questions
+1. Trace how the `api.rest.maxLimit` setting takes effect on a collection-type list request: where it is read, what default applies to the related default-limit setting, and which functions it passes through before the query is built.
+2. In what ways can an attribute be marked private, where is that decided, how is the result cached, and where are private attributes removed from API output?
+3. For the users-permissions rate limiter: how is the rate-limit key built, on which routes is the request body's email left out of the key and why, and what are the default limits?
+4. For Content API tokens: how are the token types authorised when a route is called, and what checks apply to every token regardless of type?
+
+What done looks like
+A file named `answers.md` exists in the repository root with one section per question, every claim cites an existing file path relative to the repository root, any detail not present in the code is explicitly marked "not found in code", and no other files in the repository have been modified.
+
+Constraints
+- Work only from the files in the working directory. Do not download, clone, or look up the original Strapi source or packages to compare against.
+- Do not change any file except `answers.md` in the repository root.
+- Every claim must cite a file path relative to the repo root; cited paths that do not exist lower the score.
+- If the code does not say, write "not found in code" rather than guessing.
+
+Output contract
+Write `answers.md` in the repository root with one section per question. Every claim must cite a file path relative to the repo root. If the code does not say, write "not found in code" rather than guessing. Cited paths that do not exist lower the score.

@@ -1,0 +1,15 @@
+Goal
+Fix a validation bug where a content type with an integer field configured with `min: 0` allows publishing an entry with `-5` in that field instead of failing validation. Note that a field configured with `min: 3` already rejects `1` as expected, and drafts are not expected to enforce `min`.
+
+What done looks like
+Publishing an entry enforces `min: 0` on integer fields just as it enforces positive `min` values, draft behaviour remains unchanged, relevant unit tests have been run and pass, and you provide a one-paragraph summary of the root cause and the change.
+
+Constraints
+- Work only from the files in the working directory. Do not download, clone, or look up the original Strapi source or packages to compare against.
+- Keep the fix minimal.
+- Do not delete or weaken existing tests.
+- Add or update tests if useful.
+- Run the relevant unit tests before finishing.
+
+Output contract
+Fix the bug in the source, ensure relevant unit tests are run before finishing, and finish with a one-paragraph summary of the root cause and the change.

@@ -1,0 +1,3 @@
+When a content type has an integer field configured with `min: 0`, publishing an entry with `-5` in that field succeeds when it should fail validation, whereas a field configured with `min: 3` correctly rejects `1` and drafts are not expected to enforce `min`. Fix this bug in the source code. Work only from the files in the working directory, and do not download, clone, or look up the original Strapi source or packages to compare against.
+
+Keep the fix minimal. Do not delete or weaken existing tests, and add or update tests if useful. Run the relevant unit tests before finishing, and finish with a one-paragraph summary of the root cause and the change.

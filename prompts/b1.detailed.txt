@@ -1,0 +1,15 @@
+Goal
+Fix a REST pagination bug where requesting a `pagination[pageSize]` larger than `api.rest.maxLimit` causes page offsets to be calculated incorrectly. Specifically, when a site sets `api.rest.maxLimit` to 100 and a client requests the REST list endpoint with `pagination[page]=2&pagination[pageSize]=500`, each page returns 100 entries as expected, but page 2 starts at entry 500, making entries 100 to 499 impossible to fetch.
+
+What done looks like
+The bug is fixed in the source code so that paginated requests respect `api.rest.maxLimit` consistently across pages, relevant unit tests have been run and pass, and you provide a one-paragraph summary of the root cause and the change.
+
+Constraints
+- Work only from the files in the working directory. Do not download, clone, or look up the original Strapi source or packages to compare against.
+- Keep the fix minimal.
+- Do not delete or weaken existing tests.
+- Add or update tests if useful.
+- Run the relevant unit tests before finishing.
+
+Output contract
+Fix the bug in the source, ensure relevant unit tests are run before finishing, and finish with a one-paragraph summary of the root cause and the change.

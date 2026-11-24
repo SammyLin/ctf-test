@@ -1,0 +1,15 @@
+Goal
+Inspect the customer bug report image located at `report.png` in the repository root to identify the reported symptom, then locate and fix the underlying bug in the source code.
+
+What done looks like
+You have read `report.png` to determine the symptom, fixed the bug in the source code with a minimal change, run the relevant unit tests so they pass, and provided a one-paragraph summary covering what the image showed, the root cause, and the change.
+
+Constraints
+- Work only from the files in the working directory. Do not download, clone, or look up the original Strapi source or packages to compare against.
+- Keep the fix minimal.
+- Do not delete or weaken existing tests.
+- Add or update tests if useful.
+- Run the relevant unit tests before finishing.
+
+Output contract
+Fix the bug in the source, ensure relevant unit tests are run before finishing, and finish with a one-paragraph summary of what the image showed, the root cause, and the change.
