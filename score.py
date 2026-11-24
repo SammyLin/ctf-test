@@ -1,17 +1,11 @@
-"""Score every CLI's outputs against the answer key and write a scorecard.
+"""Score every CLI's task folders against the answer key and print a scorecard.
 
-usage: python3 score.py [results_dir]          (default: ./results)
-       python3 score.py demo                   (self-check)
+usage: python3 score.py [runs_dir]        (default: ~/ctf-runs)
+       python3 score.py demo              (self-check)
 
-results/<cli>/<task>/ holds what that CLI produced:
-  audit -> findings.json
-  qa    -> answers.md
-  b1, b2, v1 -> changes.patch   (git diff of the fix)
-  optional: seconds (elapsed time), notes.txt
-
-Scoring needs the answer key in ./key, which is not published with this repo. audit and qa are
-scored straight from the output files. The three fix tasks are scored by hidden tests, which
-also need the installed task variants in ./work.
+runs_dir/<cli>/<task>/ is the folder that CLI worked in: the unzipped task, as the CLI left it.
+Needs the answer key in ./key (not published with this repo). The three fix tasks also need
+the installed task variants in ./work to run the hidden tests.
 """
 import json
 import re
@@ -24,11 +18,32 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 KEY = HERE / "key"
 WORK = HERE / "work"
+TASKS = ["audit", "b1", "b2", "qa", "v1"]
 FACETS = [("安全審查", ["audit"]), ("bug 修正", ["b1", "b2"]), ("跨模組理解", ["qa"]), ("看截圖除錯", ["v1"])]
+SKIP = {".git", "node_modules", "dist", ".nx", ".yarn"}
+
 
 def sh(cmd, cwd):
     p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=900)
     return p.stdout + p.stderr
+
+
+def changes(task, run):
+    """Compare a task folder with its zip. Returns (changed or new files, deleted files)."""
+    z = zipfile.ZipFile(HERE / "tasks" / f"{task}.zip")
+    original = {n for n in z.namelist() if not n.endswith("/")}
+    changed, deleted = [], []
+    for name in original:
+        f = run / name
+        if not f.is_file():
+            deleted.append(name)
+        elif f.read_bytes() != z.read(name):
+            changed.append(name)
+    for f in run.rglob("*"):
+        rel = f.relative_to(run)
+        if f.is_file() and not SKIP & set(rel.parts) and rel.as_posix() not in original:
+            changed.append(rel.as_posix())
+    return sorted(changed), sorted(deleted)
 
 
 def match_audit(findings, key):
@@ -43,10 +58,10 @@ def match_audit(findings, key):
     return sorted(hit), other
 
 
-def score_audit(rdir):
+def score_audit(run):
     key = json.loads((KEY / "audit_key.json").read_text())
     try:
-        findings = json.loads((rdir / "findings.json").read_text(encoding="utf-8-sig"))
+        findings = json.loads((run / "findings.json").read_text(encoding="utf-8-sig"))
         assert isinstance(findings, list)
     except Exception as e:  # missing or malformed output scores zero
         return {"points": 0, "text": f"命中 0/{len(key)}，findings.json 無法使用（{type(e).__name__}）"}
@@ -55,8 +70,8 @@ def score_audit(rdir):
             "text": f"命中 {len(hit)}/{len(key)}（{'、'.join(hit) or '無'}），共回報 {len(findings)} 項，清單外 {len(other)} 項待人工判定"}
 
 
-def score_qa(rdir):
-    f = rdir / "answers.md"
+def score_qa(run):
+    f = run / "answers.md"
     if not f.exists():
         return {"points": None, "text": "沒有 answers.md"}
     names = set(zipfile.ZipFile(HERE / "tasks" / "qa.zip").namelist())
@@ -66,17 +81,21 @@ def score_qa(rdir):
             "text": f"人工評分 __/32；引用 {len(cited)} 個檔案路徑，其中不存在 {len(fake)} 個"}
 
 
-def score_fix(task, rdir):
-    var, patch = WORK / "variants" / task, rdir / "changes.patch"
-    if not patch.exists() or not patch.stat().st_size:
-        return {"points": 0, "text": "未通過，沒有修改（changes.patch 是空的）"}
+def score_fix(task, run):
+    changed, deleted = changes(task, run)
+    code = [c for c in changed if c.startswith("packages/")]
+    if not code and not deleted:
+        return {"points": 0, "text": "未通過，沒有修改任何程式碼"}
+    var = WORK / "variants" / task
     if not var.is_dir():
-        return {"points": None, "text": "待判定：對照解答人工判定，或先建置 ./work 再算分"}
+        return {"points": None, "changed": code, "text": f"待判定：改了 {len(code)} 個檔案，需要 ./work 才能跑隱藏測試"}
     pkg, tdir, tfile, runner = json.loads((KEY / "hidden" / "tests.json").read_text())[task]
-    try:  # apply to the installed variant in place, test, then restore it
-        p = subprocess.run(["git", "apply", "--whitespace=nowarn", str(patch.resolve())], cwd=var, capture_output=True, text=True)
-        if p.returncode:
-            return {"points": 0, "text": "未通過，修改無法套用（需人工檢查）"}
+    try:  # copy the CLI's changes onto the installed variant, test, then restore it
+        for name in code:
+            (var / name).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(run / name, var / name)
+        for name in deleted:
+            (var / name).unlink(missing_ok=True)
         stat = sh(["git", "diff", "--numstat", "HEAD", "--", "*test*"], var)
         removed = sum(int(l.split()[1]) for l in stat.splitlines() if l.split()[1].isdigit())
         shutil.copy(KEY / "hidden" / tfile, var / pkg / tdir / tfile)
@@ -92,30 +111,24 @@ def score_fix(task, rdir):
         subprocess.run(["git", "clean", "-fdq"], cwd=var)
     ok = total > 0 and passed == total
     weak = f"，刪改既有測試 {removed} 行" if removed else ""
-    return {"points": int(ok), "text": f"{'通過' if ok else '未通過'}（隱藏測試 {passed}/{total}{weak}）"}
+    return {"points": int(ok), "changed": code,
+            "text": f"{'通過' if ok else '未通過'}（隱藏測試 {passed}/{total}，改了 {len(code)} 個檔案{weak}）"}
 
 
-def score_run(task, rdir):
-    r = score_audit(rdir) if task == "audit" else score_qa(rdir) if task == "qa" else score_fix(task, rdir)
-    if (rdir / "seconds").exists():
-        s = int((rdir / "seconds").read_text().strip())
-        r["text"] += f"，{s // 60} 分 {s % 60} 秒"
-    if (rdir / "notes.txt").exists():
-        r["notes"] = (rdir / "notes.txt").read_text(errors="replace").strip()
-    return r
-
-
-def main(results):
+def main(runs_dir):
     if not (KEY / "audit_key.json").exists():
         sys.exit("key/ not found. Scoring needs the answer key, which is kept out of the public repo.")
+    if not runs_dir.is_dir():
+        sys.exit(f"{runs_dir} not found. Pass the folder that holds <cli>/<task>/.")
     planted = len(json.loads((KEY / "audit_key.json").read_text()))
-    clis = sorted(d.name for d in results.iterdir() if d.is_dir())
+    clis = sorted(d.name for d in runs_dir.iterdir() if d.is_dir() and any((d / t).is_dir() for t in TASKS))
     runs = {}
     for cli in clis:
-        for task in ("audit", "b1", "b2", "qa", "v1"):
-            if (results / cli / task).is_dir():
+        for task in TASKS:
+            run = runs_dir / cli / task
+            if run.is_dir():
                 print(f"scoring {cli}/{task} ...", file=sys.stderr)
-                runs[(cli, task)] = score_run(task, results / cli / task)
+                runs[(cli, task)] = score_audit(run) if task == "audit" else score_qa(run) if task == "qa" else score_fix(task, run)
     lines = ["# 計分表", "", "| 面向 | 題目 | " + " | ".join(clis) + " |", "|---|---|" + "---|" * len(clis)]
     for facet, tasks in FACETS:
         for task in tasks:
@@ -126,13 +139,10 @@ def main(results):
         pending = sum(p is None for p in pts)
         totals.append(f"**{sum(p or 0 for p in pts)}/{planted + 3}**" + (f"（{pending} 題待判定）" if pending else ""))
     lines.append(f"| 自動計分小計 | 安全 {planted} + 修正 3 | " + " | ".join(totals) + " |")
-    notes = [f"- {c}/{t}：{r['notes']}" for (c, t), r in runs.items() if r.get("notes")]
-    if notes:
-        lines += ["", "## 執行時的備註", *notes]
     lines += ["", "跨模組理解的 32 分與安全審查的清單外發現需要人工判定，標準在 key/qa_rubric.md 與 key/ANSWER_KEY.md。"]
-    (results / "scorecard.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (runs_dir / "scorecard.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     detail = [{"cli": c, "task": t, **r} for (c, t), r in runs.items()]
-    (results / "scorecard.json").write_text(json.dumps(detail, ensure_ascii=False, indent=1), encoding="utf-8")
+    (runs_dir / "scorecard.json").write_text(json.dumps(detail, ensure_ascii=False, indent=1), encoding="utf-8")
     print("\n".join(lines))
 
 
@@ -149,4 +159,4 @@ if __name__ == "__main__":
     if sys.argv[1:] == ["demo"]:
         demo()
     else:
-        main(Path(sys.argv[1] if len(sys.argv) > 1 else HERE / "results").resolve())
+        main(Path(sys.argv[1] if len(sys.argv) > 1 else Path.home() / "ctf-runs").expanduser().resolve())

@@ -2,96 +2,117 @@
 
 用同一套題目比較不同的 AI coding CLI，得到可以量化的分數。
 
-題目建立在開源的 [Strapi](https://github.com/strapi/strapi) v5.63.0 上。我們在裡面植入了漏洞和 bug，所以任何模型都沒看過答案。把同一份 prompt 丟給每個 CLI，收集它們的產出，再用解答算分。
+題目是開源的 [Strapi](https://github.com/strapi/strapi) v5.63.0，我們在裡面植入了漏洞和 bug。把同一份 prompt 貼給每個 CLI，最後用解答算分。
 
-解答不在這個 repo 裡，由出題者另外保管。
+## 五個題目
 
-## 題目
+| 題目 | 面向 | CLI 要做什麼 |
+|---|---|---|
+| `audit` | 安全審查 | 找出被植入的安全漏洞，寫成 `findings.json` |
+| `b1` | bug 修正 | 依症狀描述修好一個 bug |
+| `b2` | bug 修正 | 依症狀描述修好另一個 bug |
+| `v1` | 看截圖除錯 | 症狀只在一張截圖裡，看圖找出問題並修好 |
+| `qa` | 跨模組理解 | 回答 4 個「這功能怎麼運作」的問題，寫成 `answers.md` |
 
-| 面向 | 題目 | CLI 要交的產出 | 怎麼算分 |
+## 怎麼跑
+
+以 Claude Code 跑 `audit` 為例。其他 CLI、其他題目，把指令裡的 `claude-code` 和 `audit` 換掉就好。
+
+### 第 1 步：下載這個 repo
+
+```bash
+git clone https://github.com/SammyLin/ctf-test.git
+cd ctf-test
+```
+
+### 第 2 步：解壓一題到 repo 外面
+
+Mac / Linux：
+
+```bash
+mkdir -p ~/ctf-runs/claude-code/audit
+unzip -q tasks/audit.zip -d ~/ctf-runs/claude-code/audit
+```
+
+Windows（PowerShell）：
+
+```powershell
+mkdir C:\ctf-runs\delta-code\audit
+tar -xf tasks\audit.zip -C C:\ctf-runs\delta-code\audit
+```
+
+資料夾固定取名 `ctf-runs/<CLI 名稱>/<題目>`，算分時靠這個名稱辨認。
+
+### 第 3 步：用 CLI 打開那個資料夾
+
+```bash
+cd ~/ctf-runs/claude-code/audit
+claude
+```
+
+圖形介面的工具就用「開啟資料夾」選同一個位置。
+
+### 第 4 步：貼上 prompt
+
+打開 `prompts/audit.txt`，把整份內容貼進 CLI 送出。
+
+然後讓它自己做完。不要提示、不要幫忙、不要回答它的問題。建議上限 30 分鐘，超過就中止。
+
+### 第 5 步：換下一題、換下一個 CLI
+
+每一題都開新的對話，重複第 2 到第 4 步。做完的資料夾留著不要動。
+
+全部跑完後，資料夾會長這樣：
+
+```
+ctf-runs/
+  claude-code/
+    audit/  b1/  b2/  v1/  qa/
+  delta-code/
+    audit/  b1/  b2/  v1/  qa/
+```
+
+在別台電腦跑的 CLI，把它的整個資料夾（例如 `delta-code`）壓縮後複製過來，放進同一個 `ctf-runs` 底下。
+
+## 怎麼算分
+
+算分需要解答。解答不在這個 repo 裡，由出題者保管，放在 `key/` 資料夾。
+
+```bash
+python3 score.py ~/ctf-runs
+```
+
+輸出一張計分表，每個 CLI 一欄。下面是格式示意，數字是虛構的：
+
+```
+| 面向 | 題目 | claude-code | delta-code |
 |---|---|---|---|
-| 安全審查 | `audit` | `findings.json` | 自動：植入的漏洞命中幾個 |
-| bug 修正 | `b1`、`b2` | 修改後的程式碼 | 自動：隱藏測試全過記 1 分 |
-| 看截圖除錯 | `v1` | 修改後的程式碼 | 自動：隱藏測試全過記 1 分 |
-| 跨模組理解 | `qa` | `answers.md` | 人工：依評分表給分。自動檢查引用的檔案路徑是否存在 |
-
-`audit` 植入了幾個漏洞不公開，prompt 也不會告訴受測的 CLI。`v1` 的症狀只寫在 `report.png` 這張圖裡，CLI 讀不了圖片就做不出來。
-
-## 流程
-
-對每個要比較的 CLI、每一題，做同樣的三步，最後一起算分。下面以名稱 `cli-a` 為例，名稱可以自己取。
-
-### 1. 建立題目資料夾
-
-```bash
-./start.sh cli-a audit          # Windows: .\start.ps1 cli-a audit
+| 安全審查 | audit | 命中 3/N，共回報 5 項，清單外 2 項待人工判定 | 命中 1/N，共回報 9 項，清單外 8 項待人工判定 |
+| bug 修正 | b1 | 通過（隱藏測試 3/3，改了 1 個檔案） | 未通過（隱藏測試 1/3，改了 2 個檔案） |
+| bug 修正 | b2 | 通過（隱藏測試 4/4，改了 1 個檔案） | 未通過，沒有修改任何程式碼 |
+| 跨模組理解 | qa | 人工評分 __/32；引用 14 個檔案路徑，其中不存在 0 個 | 人工評分 __/32；引用 11 個檔案路徑，其中不存在 3 個 |
+| 看截圖除錯 | v1 | 通過（隱藏測試 4/4，改了 1 個檔案） | 未通過，沒有修改任何程式碼 |
+| 自動計分小計 | | **6/M** | **1/M** |
 ```
 
-這會把 `tasks/audit.zip` 解壓到 repo 以外的位置（Mac 是 `~/eval-runs/cli-a/audit`，Windows 是 `C:\eval-runs\cli-a\audit`），開始計時，並把 prompt 複製到剪貼簿。需要 git。
+各題的算法：
 
-題目資料夾要放在這個 repo 外面，受測的 CLI 才不會讀到其他題目或別的 CLI 的產出。
-
-### 2. 讓 CLI 作答
-
-用該 CLI 打開題目資料夾，開新的對話，貼上 prompt。prompt 在 `prompts/<題目>.short.txt` 或 `.detailed.txt`，要比較的 CLI 必須用同一個版本。
-
-讓它自己做完，不提示、不幫忙。建議每題上限 30 分鐘。
-
-### 3. 收集產出
-
-```bash
-./finish.sh cli-a audit         # Windows: .\finish.ps1 cli-a audit
-```
-
-產出會存到 `results/cli-a/audit/`：
-
-| 檔案 | 內容 |
+| 題目 | 算法 |
 |---|---|
-| `findings.json` | audit 的答案 |
-| `answers.md` | qa 的答案 |
-| `changes.patch` | CLI 改了哪些程式碼（`git diff`） |
-| `seconds` | 花了幾秒 |
-| `notes.txt` | 你寫的備註，例如報錯、卡住、讀不了圖片 |
+| `audit` | 回報的檔案和行號對得上植入的漏洞，就算命中一個 |
+| `b1`、`b2`、`v1` | 把 CLI 改過的檔案拿去跑隱藏測試，全部通過記 1 分 |
+| `qa` | 依評分表人工給分。程式會自動檢查答案裡引用的檔案路徑是不是真的存在 |
 
-不想用腳本也可以，自己把上面的檔案放進 `results/<cli>/<題目>/` 就行。
+需要人工判定的有兩項：`qa` 的分數，以及 `audit` 裡不在解答清單上的發現算不算真問題。評分時先把 CLI 名稱遮掉，比較公正。
 
-### 4. 算分
+## 注意事項
 
-所有 CLI 都跑完後，把 `results/` 交給持有解答的人。對方把解答放在 `key/`，執行：
-
-```bash
-python3 score.py
-```
-
-輸出 `results/scorecard.md`，每個 CLI 一欄、每個面向一列，最後一列是自動計分的小計。下面是格式示意，數字是虛構的：
-
-```
-| 面向 | 題目 | cli-a | cli-b |
-|---|---|---|---|
-| 安全審查 | audit | 命中 3/N，共回報 5 項，清單外 2 項待人工判定，12 分 4 秒 | 命中 1/N，共回報 9 項… |
-| bug 修正 | b1 | 通過（隱藏測試 3/3），4 分 10 秒 | 未通過（隱藏測試 1/3），9 分 2 秒 |
-| 跨模組理解 | qa | 人工評分 __/32；引用 14 個檔案路徑，其中不存在 0 個 | 人工評分 __/32；引用 11 個，其中不存在 3 個 |
-| 自動計分小計 | | **6/M** | **2/M** |
-```
-
-需要人工判定的有兩項：`qa` 的分數，以及 `audit` 清單以外的發現是真問題還是誤報。評分時先把 CLI 名稱遮掉再評，比較公正。
-
-## 資料夾
-
-| 路徑 | 內容 |
-|---|---|
-| `tasks/` | 5 題的程式碼，各一個 zip |
-| `prompts/` | 每題兩個版本的 prompt：`short`、`detailed` |
-| `start.*`、`finish.*` | 建立題目資料夾、收集產出 |
-| `score.py` | 計分程式，只用 Python 標準函式庫，需要解答才能執行 |
-
-## 公平性
-
-- 題目資料夾沒有 git 歷史，檔案時間一致，會直接指出答案的既有測試已經移除。
+- 題目資料夾要放在這個 repo 外面，CLI 才不會讀到其他題目。
+- 每個 CLI 都用同一份 prompt，一個字都不要改。
+- prompt 明訂不得下載原版 Strapi 來比對。看到 CLI 這樣做，該題記 0 分。
 - 題目資料夾沒有安裝套件，所有 CLI 都跑不了測試，條件相同。
-- prompt 明訂不得下載原版 Strapi 來比對。發現受測 CLI 這樣做，該題記 0 分。
+- `audit` 植入了幾個漏洞不公開，prompt 也不會告訴 CLI。
 - prompt 由另一個模型（Gemini 4 Argon）設計，它沒看過解答。
-- 解答、隱藏測試、植入腳本都不在這個 repo 裡。
 
 ## 授權
 
